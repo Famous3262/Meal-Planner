@@ -1,9 +1,11 @@
 import { MEAL_DATABASE } from '../data/meals';
 
-export const recommendMealsForDay = (profile) => {
+export const recommendMealsForDay = (profile, excludeIds = []) => {
     if (!profile) return null;
 
     let eligibleMeals = MEAL_DATABASE.filter(meal => {
+        if (excludeIds.includes(meal.id)) return false;
+
         const hasAllergen = profile.allergies?.some(allergen =>
             meal.healthFlags.some(flag => flag.toLowerCase().includes(allergen.toLowerCase())) ||
             meal.ingredients.some(ing => ing.name.toLowerCase().includes(allergen.toLowerCase()))
@@ -18,7 +20,7 @@ export const recommendMealsForDay = (profile) => {
     }
 
     const scoreMeal = (meal) => {
-        let score = 0;
+        let score = Math.random() * 5; // Add slight randomness
         if (profile.culturalPreference === 'african' && meal.culture === 'african') score += 10;
         if (profile.culturalPreference === 'international' && meal.culture !== 'african') score += 10;
         if (profile.culturalPreference === 'mixed') score += 5;

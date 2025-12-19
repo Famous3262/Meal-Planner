@@ -3,24 +3,36 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 import OnboardingWizard from './src/components/features/onboarding/OnboardingWizard';
 import { DailyView } from './src/components/features/planner/DailyView';
+import { RecipesList } from './src/components/features/planner/RecipesList';
 import { ShoppingList } from './src/components/features/planner/ShoppingList';
+import { TimetableScreen } from './src/components/features/planner/TimetableScreen';
 import { Typography } from './src/components/ui/Typography';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import LandingScreen from './src/screens/auth/LandingScreen';
+import LoginScreen from './src/screens/auth/LoginScreen';
+import SignupScreen from './src/screens/auth/SignupScreen';
 import { recommendMealsForDay } from './src/utils/recommendationEngine';
 import { THEME } from './src/utils/theme';
 
-export default function App() {
-    const [loading, setLoading] = useState(true);
+function MainApp() {
+    const { user, loading: authLoading, logout } = useAuth();
+    const [onboardingLoading, setOnboardingLoading] = useState(true);
     const [profile, setProfile] = useState(null);
     const [dailyPlan, setDailyPlan] = useState(null);
-    const [activeTab, setActiveTab] = useState('planner');
+    const [activeTab, setActiveTab] = useState('planner'); // 'planner', 'grocery', 'recipes', 'timetable'
+    const [authMode, setAuthMode] = useState('landing');
 
     useEffect(() => {
-        loadProfile();
-    }, []);
+        if (user) {
+            loadProfile();
+        } else {
+            setOnboardingLoading(false);
+        }
+    }, [user]);
 
     const loadProfile = async () => {
         try {
-            const savedProfile = await AsyncStorage.getItem('user_profile');
+            const savedProfile = await AsyncStorage.getItem(`profile_${user.id}`);
             if (savedProfile) {
                 const parsed = JSON.parse(savedProfile);
                 setProfile(parsed);
@@ -30,34 +42,32 @@ export default function App() {
         } catch (e) {
             console.error('Failed to load profile', e);
         } finally {
-            // Small timeout to ensure smoother transition from splash
-            setTimeout(() => setLoading(false), 500);
+            setOnboardingLoading(false);
         }
     };
 
     const handleOnboardingComplete = async (newProfile) => {
-        setLoading(true);
+        setOnboardingLoading(true);
         try {
-            await AsyncStorage.setItem('user_profile', JSON.stringify(newProfile));
+            await AsyncStorage.setItem(`profile_${user.id}`, JSON.stringify(newProfile));
             const plan = recommendMealsForDay(newProfile);
             setProfile(newProfile);
             setDailyPlan(plan);
         } catch (e) {
             console.error('Failed to save profile', e);
         } finally {
-            setLoading(false);
+            setOnboardingLoading(false);
         }
     };
 
-    const handleReset = async () => {
-        setLoading(true);
-        await AsyncStorage.removeItem('user_profile');
+    const handleLogout = async () => {
+        await logout();
         setProfile(null);
         setDailyPlan(null);
-        setLoading(false);
+        setAuthMode('landing');
     };
 
-    if (loading) {
+    if (authLoading || onboardingLoading) {
         return (
             <View style={styles.centered}>
                 <ActivityIndicator size="large" color={THEME.colors.primary} />
@@ -65,69 +75,99 @@ export default function App() {
         );
     }
 
+    // Auth Flow
+    if (!user) {
+        if (authMode === 'login') {
+            return <LoginScreen onSignup={() => setAuthMode('signup')} onBack={() => setAuthMode('landing')} />;
+        }
+        if (authMode === 'signup') {
+            return <SignupScreen onLogin={() => setAuthMode('login')} onBack={() => setAuthMode('landing')} />;
+        }
+        return <LandingScreen onGetStarted={() => setAuthMode('signup')} onLogin={() => setAuthMode('login')} />;
+    }
+
+    // Onboarding Flow
+    if (!profile) {
+        return <OnboardingWizard onComplete={handleOnboardingComplete} />;
+    }
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'planner': return <DailyView profile={profile} plan={dailyPlan} onPlanUpdate={setDailyPlan} />;
+            case 'grocery': return <ShoppingList plan={dailyPlan} />;
+            case 'recipes': return <RecipesList profile={profile} />;
+            case 'timetable': return <TimetableScreen profile={profile} onUpdatePlan={(p) => setDailyPlan(p)} />;
+            default: return <DailyView profile={profile} plan={dailyPlan} onPlanUpdate={setDailyPlan} />;
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" />
-            {!profile ? (
-                <OnboardingWizard onComplete={handleOnboardingComplete} />
-            ) : (
-                <View style={styles.dashboard}>
-                    <View style={styles.header}>
-                        <View style={styles.headerTop}>
-                            <Typography variant="xl" style={{ color: THEME.colors.primary, fontWeight: '800' }}>
-                                Meal Planner
-                            </Typography>
-                            <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
-                                <Typography variant="xs" color={THEME.colors.textMuted}>Reset</Typography>
-                            </TouchableOpacity>
-                        </View>
-                        <Typography color={THEME.colors.textMuted}>
-                            Hi {profile.name || 'friend'}, eat healthy!
+            <View style={styles.dashboard}>
+                <View style={styles.header}>
+                    <View style={styles.headerTop}>
+                        <Typography variant="xl" style={{ color: THEME.colors.primary, fontWeight: '800' }}>
+                            GlowMeal
                         </Typography>
-                    </View>
-
-                    <View style={styles.content}>
-                        {activeTab === 'planner' ? (
-                            <DailyView
-                                profile={profile}
-                                plan={dailyPlan}
-                                onPlanUpdate={setDailyPlan}
-                            />
-                        ) : (
-                            <ShoppingList plan={dailyPlan} />
-                        )}
-                    </View>
-
-                    <View style={styles.bottomNav}>
-                        <TouchableOpacity
-                            style={styles.navItem}
-                            onPress={() => setActiveTab('planner')}
-                        >
-                            <Typography
-                                color={activeTab === 'planner' ? THEME.colors.primary : THEME.colors.textMuted}
-                                style={{ fontWeight: activeTab === 'planner' ? '700' : '400' }}
-                            >
-                                Planner
-                            </Typography>
+                        <TouchableOpacity onPress={handleLogout} style={styles.resetBtn}>
+                            <Typography variant="xs" color={THEME.colors.textMuted}>Logout</Typography>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.navItem}
-                            onPress={() => setActiveTab('grocery')}
-                        >
-                            <Typography
-                                color={activeTab === 'grocery' ? THEME.colors.primary : THEME.colors.textMuted}
-                                style={{ fontWeight: activeTab === 'grocery' ? '700' : '400' }}
-                            >
-                                Grocery
-                            </Typography>
-                        </TouchableOpacity>
-                        <View style={styles.navItem}>
-                            <Typography color={THEME.colors.textMuted}>Recipes</Typography>
-                        </View>
                     </View>
                 </View>
-            )}
+
+                <View style={styles.content}>
+                    {renderContent()}
+                </View>
+
+                <View style={styles.bottomNav}>
+                    <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('planner')}>
+                        <Typography
+                            variant="xs"
+                            color={activeTab === 'planner' ? THEME.colors.primary : THEME.colors.textMuted}
+                            style={{ fontWeight: activeTab === 'planner' ? '700' : '400' }}
+                        >
+                            Planner
+                        </Typography>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('timetable')}>
+                        <Typography
+                            variant="xs"
+                            color={activeTab === 'timetable' ? THEME.colors.primary : THEME.colors.textMuted}
+                            style={{ fontWeight: activeTab === 'timetable' ? '700' : '400' }}
+                        >
+                            Weeks
+                        </Typography>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('recipes')}>
+                        <Typography
+                            variant="xs"
+                            color={activeTab === 'recipes' ? THEME.colors.primary : THEME.colors.textMuted}
+                            style={{ fontWeight: activeTab === 'recipes' ? '700' : '400' }}
+                        >
+                            Recipes
+                        </Typography>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('grocery')}>
+                        <Typography
+                            variant="xs"
+                            color={activeTab === 'grocery' ? THEME.colors.primary : THEME.colors.textMuted}
+                            style={{ fontWeight: activeTab === 'grocery' ? '700' : '400' }}
+                        >
+                            Grocery
+                        </Typography>
+                    </TouchableOpacity>
+                </View>
+            </View>
         </SafeAreaView>
+    );
+}
+
+export default function App() {
+    return (
+        <AuthProvider>
+            <MainApp />
+        </AuthProvider>
     );
 }
 

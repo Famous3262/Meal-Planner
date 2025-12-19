@@ -10,10 +10,11 @@ export const DailyView = ({ profile, plan, onPlanUpdate }) => {
     const [selectedMeal, setSelectedMeal] = useState(null);
 
     const handleSwap = (type) => {
-        const newPlan = recommendMealsForDay(profile);
+        const currentIds = Object.values(plan).filter(m => m).map(m => m.id);
+        const newPlan = recommendMealsForDay(profile, currentIds);
         onPlanUpdate({
             ...plan,
-            [type]: newPlan[type]
+            [type]: newPlan[type] || plan[type]
         });
     };
 

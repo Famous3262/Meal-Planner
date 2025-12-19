@@ -1,6 +1,6 @@
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { THEME } from '../../utils/theme';
-import { Typography } from '../ui/Typography';
+import { THEME } from '../../../utils/theme';
+import { Typography } from '../../ui/Typography';
 
 export const MealCard = ({ type, meal, onSwap, onPress }) => {
     if (!meal) return (
